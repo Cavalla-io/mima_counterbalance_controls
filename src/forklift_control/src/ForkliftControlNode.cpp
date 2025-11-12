@@ -74,7 +74,34 @@ public:
 
 private:
   void tick_() {
+    if (!joy_.has_message()) {
+      apply_safe_outputs_();
+      return;
+    }
+
     const auto s = joy_.latest();
+
+    if (!first_joy_received_) {
+      first_joy_received_ = true;
+      startup_lockout_active_ = !inputs_neutral_(s);
+      if (startup_lockout_active_) {
+        RCLCPP_WARN(
+          get_logger(),
+          "Joystick startup lockout: release all buttons, triggers, and sticks to enable control.");
+      }
+    }
+
+    if (startup_lockout_active_) {
+      if (!inputs_neutral_(s)) {
+        apply_safe_outputs_();
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 500,
+          "Joystick startup lockout active: release all controls to continue.");
+        return;
+      }
+      startup_lockout_active_ = false;
+      RCLCPP_INFO(get_logger(), "Joystick lockout cleared; controls enabled.");
+    }
 
     // --- E-STOP toggle like python (X sets, Y clears) ---
     if (s.X)      estop_ = true;
@@ -144,7 +171,37 @@ private:
   rclcpp::TimerBase::SharedPtr     ka_drive_timer_;
   rclcpp::TimerBase::SharedPtr     ka_fork_timer_;
   bool        estop_ = false;
+  bool        first_joy_received_ = false;
+  bool        startup_lockout_active_ = false;
   std::string fork_status_ = "OFF";
+
+  bool inputs_neutral_(const forklift_control::JoyState& s) const {
+    constexpr float STICK_THRESH = 0.15f;
+    constexpr float TRIGGER_THRESH = 0.10f;
+
+    if (std::fabs(s.lx) > STICK_THRESH) return false;
+    if (std::fabs(s.ly) > STICK_THRESH) return false;
+    if (std::fabs(s.rx) > STICK_THRESH) return false;
+    if (std::fabs(s.ry) > STICK_THRESH) return false;
+    if (trig01(s.lt) > TRIGGER_THRESH) return false;
+    if (trig01(s.rt) > TRIGGER_THRESH) return false;
+
+    if (s.A || s.B || s.X || s.Y ||
+        s.LB || s.RB ||
+        s.SELECT || s.START) {
+      return false;
+    }
+
+    return true;
+  }
+
+  void apply_safe_outputs_() {
+    drive_.set_direction_lowbits(false, false);
+    drive_.set_speed_rpm(0.0f);
+    drive_.set_steering_deg(0.0f);
+    fork_.stop_hydraulics();
+    fork_status_ = "OFF";
+  }
 };
 
 int main(int argc, char** argv)

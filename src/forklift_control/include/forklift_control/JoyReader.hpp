@@ -20,6 +20,7 @@ public:
 
   // Thread-safe copy of latest values
   JoyState latest() const;
+  bool has_message() const;
 
 private:
   void cb_(const sensor_msgs::msg::Joy::SharedPtr msg);
@@ -27,6 +28,7 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr sub_;
   mutable std::mutex mtx_;
   JoyState state_;
+  bool have_data_ = false;
 };
 
 } // namespace forklift_control

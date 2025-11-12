@@ -41,12 +41,19 @@ void JoyReader::cb_(const Joy::SharedPtr msg)
 
   std::lock_guard<std::mutex> lk(mtx_);
   state_ = s;
+  have_data_ = true;
 }
 
 JoyState JoyReader::latest() const
 {
   std::lock_guard<std::mutex> lk(mtx_);
   return state_;
+}
+
+bool JoyReader::has_message() const
+{
+  std::lock_guard<std::mutex> lk(mtx_);
+  return have_data_;
 }
 
 } // namespace forklift_control
