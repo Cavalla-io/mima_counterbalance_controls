@@ -39,6 +39,7 @@ public:
   void set_lift_solenoid(bool on);   // bit5 (0x20)
   void set_lower_solenoid(bool on);  // bit4 (0x10)
   void set_descent_valve(int value_0_200);   // Byte7
+  void set_safe_state(bool safe);    // bit0 (0x01)
 
   // Convenience
   void send_now();                    // pack current fields and send
@@ -65,6 +66,7 @@ private:
   // byte0 submasks
   uint8_t dir_mask_ = 0x00;            // 0x02 RT, 0x04 LT
   uint8_t hyd_mask_ = 0x00;            // 0x10 lower, 0x20 lift
+  bool    safe_state_ = false;         // bit0 (0x01)
 
   // other payload fields
   int16_t speed_rpm_ = 0;              // magnitude only (>=0)

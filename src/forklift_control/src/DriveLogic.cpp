@@ -86,7 +86,14 @@ void DriveLogic::pack_and_send_0x200_()
 {
   std::array<uint8_t,8> d{};
   // Byte0
-  d[0] = static_cast<uint8_t>((b0_base_ | dir_mask_ | hyd_mask_) & 0xFF);
+  uint8_t byte0 = static_cast<uint8_t>(b0_base_ & static_cast<uint8_t>(~0x01u));
+  byte0 = static_cast<uint8_t>((byte0 | dir_mask_ | hyd_mask_) & 0xFF);
+  if (safe_state_) {
+    byte0 |= 0x01u;
+  } else {
+    byte0 &= static_cast<uint8_t>(~0x01u);
+  }
+  d[0] = byte0;
   // Bytes1-2: speed int16 LE (non-negative)
   put_i16_le(d, 1, speed_rpm_);
   // Byte3 accel (0.1..25.5 s → 1..255)
@@ -105,6 +112,13 @@ void DriveLogic::pack_and_send_0x200_()
   //              cob_cmd_, d[0], speed_rpm_, d[3], d[4], steer_counts_, d[7]);
 
   can_.send(cob_cmd_, d, 8);
+}
+
+void DriveLogic::set_safe_state(bool safe)
+{
+  if (safe == safe_state_) return;
+  safe_state_ = safe;
+  pack_and_send_0x200_();
 }
 
 } // namespace forklift_control

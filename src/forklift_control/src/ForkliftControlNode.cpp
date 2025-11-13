@@ -3,6 +3,7 @@
 #include "forklift_control/DriveLogic.hpp"
 #include "forklift_control/ForkLogic.hpp"
 #include "forklift_control/SocketCanIface.hpp"
+#include "forklift_control/SafetyMonitor.hpp"
 #include <cmath>
 #include <algorithm>
 
@@ -40,7 +41,8 @@ public:
     joy_(*this, "/joy"),
     can_(declare_parameter<std::string>("can_iface", "can0")),
     drive_(can_, /*node_id=*/declare_parameter<int>("node_id", 3)),
-    fork_(can_, drive_, /*node_id*/std::nullopt)
+    fork_(can_, drive_, /*node_id*/std::nullopt),
+    safety_(*this)
   {
     // Initial drive state
     drive_.set_ramps(1.0f, 1.0f);           // accel/decel seconds
@@ -70,12 +72,24 @@ public:
       static_cast<unsigned>(0x200 + nodeid),
       static_cast<unsigned>(0x300 + nodeid)
     );
+
+    RCLCPP_WARN(
+      get_logger(),
+      "Safety heartbeat required; forklift remains UNSAFE until heartbeat reports safe.");
   }
 
 private:
   void tick_() {
+    const bool safety_ok = safety_.is_safe();
+    drive_.set_safe_state(safety_ok);
+
     if (!joy_.has_message()) {
       apply_safe_outputs_();
+      if (!safety_ok) {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 500,
+          "Safety heartbeat missing or unsafe; controls disabled.");
+      }
       return;
     }
 
@@ -101,6 +115,14 @@ private:
       }
       startup_lockout_active_ = false;
       RCLCPP_INFO(get_logger(), "Joystick lockout cleared; controls enabled.");
+    }
+
+    if (!safety_ok) {
+      apply_safe_outputs_();
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 500,
+        "Safety heartbeat missing or unsafe; controls disabled.");
+      return;
     }
 
     // --- E-STOP toggle like python (X sets, Y clears) ---
@@ -167,6 +189,7 @@ private:
   forklift_control::SocketCanIface can_;
   forklift_control::DriveLogic     drive_;
   forklift_control::ForkLogic      fork_;
+  forklift_control::SafetyMonitor  safety_;
   rclcpp::TimerBase::SharedPtr     ctrl_timer_;
   rclcpp::TimerBase::SharedPtr     ka_drive_timer_;
   rclcpp::TimerBase::SharedPtr     ka_fork_timer_;
