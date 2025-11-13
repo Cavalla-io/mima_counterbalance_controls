@@ -41,8 +41,8 @@ public:
     joy_(*this, "/joy"),
     can_(declare_parameter<std::string>("can_iface", "can0")),
     drive_(can_, /*node_id=*/declare_parameter<int>("node_id", 3)),
-    fork_(can_, drive_, /*node_id*/std::nullopt),
-    safety_(*this)
+  fork_(can_, drive_, /*node_id*/std::nullopt),
+  safety_(*this, "/safety/heartbeat", 500ms, false, 4)
   {
     // Initial drive state
     drive_.set_ramps(1.0f, 1.0f);           // accel/decel seconds

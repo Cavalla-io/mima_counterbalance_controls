@@ -24,7 +24,7 @@ target_compile_features(drive_logic PUBLIC cxx_std_17)
 add_library(safety_monitor src/SafetyMonitor.cpp)
 target_include_directories(safety_monitor PUBLIC include)
 target_compile_features(safety_monitor PUBLIC cxx_std_17)
-ament_target_dependencies(safety_monitor rclcpp std_msgs)
+ament_target_dependencies(safety_monitor rclcpp std_msgs sensor_msgs)
 
 # SocketCAN adapter is header-only
 add_library(socketcan_iface INTERFACE)
