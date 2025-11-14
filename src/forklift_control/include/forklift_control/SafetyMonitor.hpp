@@ -48,6 +48,7 @@ private:
   int joy_button_index_ = -1;
   bool joystick_safe_ = false;
   bool have_joy_ = false;
+  bool last_joy_button_state_{false}; 
 };
 
 }  // namespace forklift_control
