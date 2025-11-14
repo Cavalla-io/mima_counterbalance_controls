@@ -26,14 +26,6 @@ static inline float dz(float x, float d = DEADZONE) {
   return std::copysign(s, x);
 }
 
-// Normalize triggers to [0..1] increasing with press.
-// - If device reports [0..1] idle=1 pressed=0 → invert.
-// - Else assume [-1..1] idle=+1 pressed=-1 → map to [0..1].
-static inline float trig01(float v) {
-  if (v >= 0.f && v <= 1.f) return 1.f - v;
-  return (1.f - v) * 0.5f;
-}
-
 class ForkliftControlNode : public rclcpp::Node {
 public:
   ForkliftControlNode()
@@ -132,9 +124,9 @@ private:
     // ----- Drive -----
     const float steer_cmd_deg = dz(s.lx) * MAX_STEER_DEG;
 
-    // Triggers → [0..1] increasing with press (handles both [-1..1] and [0..1] devices)
-    const float lt_n = trig01(s.lt);  // reverse
-    const float rt_n = trig01(s.rt);  // forward
+    // Raw trigger values (assumed already scaled 0..1 increasing with press)
+    const float lt_n = s.lt;  // reverse
+    const float rt_n = s.rt;  // forward
 
     // Direction bits (EPS, RT wins ties)
     constexpr float EPS = 0.05f;
@@ -174,7 +166,7 @@ private:
       fork_status_ = "OFF";
     }
 
-    // Debug (0.5s throttle) showing raw vs normalized triggers too
+    // Debug (0.5s throttle) showing raw trigger values too
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 500,
       "ESTOP=%d  RT=%.2f LT=%.2f  rpm=%s  steer=%+.0f  RY=%+.2f  forks=%s",
@@ -206,8 +198,8 @@ private:
     if (std::fabs(s.ly) > STICK_THRESH) return false;
     if (std::fabs(s.rx) > STICK_THRESH) return false;
     if (std::fabs(s.ry) > STICK_THRESH) return false;
-    if (trig01(s.lt) > TRIGGER_THRESH) return false;
-    if (trig01(s.rt) > TRIGGER_THRESH) return false;
+    if (s.lt > TRIGGER_THRESH) return false;
+    if (s.rt > TRIGGER_THRESH) return false;
 
     if (s.A || s.B || s.X || s.Y ||
         s.LB || s.RB ||
