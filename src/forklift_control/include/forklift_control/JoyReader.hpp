@@ -21,6 +21,8 @@ public:
   // Thread-safe copy of latest values
   JoyState latest() const;
   bool has_message() const;
+  // Time of the last received message (clock used is the node's clock)
+  rclcpp::Time last_msg_time() const;
 
 private:
   void cb_(const sensor_msgs::msg::Joy::SharedPtr msg);
@@ -29,6 +31,8 @@ private:
   mutable std::mutex mtx_;
   JoyState state_;
   bool have_data_ = false;
+  rclcpp::Clock::SharedPtr clock_;
+  rclcpp::Time last_msg_time_;
 };
 
 } // namespace forklift_control

@@ -68,6 +68,10 @@ public:
     RCLCPP_WARN(
       get_logger(),
       "Safety heartbeat required; forklift remains UNSAFE until heartbeat reports safe.");
+
+    // Parameter: how recent a /joy message must be (ms) to allow one-shot
+    // execution when the safety heartbeat is missing.
+    (void)declare_parameter<int>("recent_joy_window_ms", 200);
   }
 
 private:
@@ -109,13 +113,26 @@ private:
       RCLCPP_INFO(get_logger(), "Joystick lockout cleared; controls enabled.");
     }
 
-    if (!safety_ok) {
-      apply_safe_outputs_();
-      RCLCPP_WARN_THROTTLE(
-        get_logger(), *get_clock(), 500,
-        "Safety heartbeat missing or unsafe; controls disabled.");
-      return;
-    }
+      // Allow a one-shot joystick command only if the last /joy message is
+      // very recent (configured by 'recent_joy_window_ms'). Otherwise send
+      // safe outputs and skip processing.
+      bool recent_ok = false;
+      if (joy_.has_message()) {
+        const auto last = joy_.last_msg_time();
+        const auto now = this->get_clock()->now();
+        const auto elapsed_ns = (now - last).nanoseconds();
+        const int ms = static_cast<int>(elapsed_ns / 1000000);
+        const int recent_ms = static_cast<int>(get_parameter("recent_joy_window_ms").as_int());
+        if (ms >= 0 && ms <= recent_ms) recent_ok = true;
+      }
+      if (!recent_ok) {
+        apply_safe_outputs_();
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 500,
+          "Not Seeing Recent Messages");
+        return;
+      }
+      // otherwise fall through and execute the joystick-derived commands once
 
     // --- E-STOP toggle like python (X sets, Y clears) ---
     if (s.X)      estop_ = true;
@@ -217,6 +234,8 @@ private:
     fork_.stop_hydraulics();
     fork_status_ = "OFF";
   }
+
+  // zero-timer / one-shot behavior removed; tick_() handles recent-joy checks
 };
 
 int main(int argc, char** argv)
