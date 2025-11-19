@@ -13,17 +13,18 @@ namespace forklift_control {
 
 class SafetyMonitor {
 public:
-  // If `check_nonzero_int` is true the monitor will subscribe to an Int32 topic and
-  // consider the heartbeat 'safe' only when the message `data` field is non-zero.
+  // If `check_status_int` is true the monitor will subscribe to an Int32 topic and
+  // map the heartbeat status as: 0 = safe, 1 = teleop window unfocused (unsafe),
+  // 2 = high latency (unsafe), 3 = controller disconnected (unsafe).
   // If `joy_button_index >= 0` the monitor will subscribe to a `sensor_msgs::msg::Joy`
-  // topic and consider the heartbeat 'safe' only when the given `buttons[joy_button_index]` is non-zero.
-  // If `joy_button_index < 0` and `check_nonzero_int` is true the monitor will subscribe to an
-  // `std_msgs::msg::Int32` topic and consider non-zero data as safe. Otherwise the default is
+  // topic and interpret the given `buttons[joy_button_index]` values using the same mapping.
+  // If `joy_button_index < 0` and `check_status_int` is true the monitor will subscribe to an
+  // `std_msgs::msg::Int32` topic and apply the same safety mapping. Otherwise the default is
   // a `std_msgs::msg::Bool` topic where true means safe.
   SafetyMonitor(rclcpp::Node& node,
-                const std::string& heartbeat_topic = "/safety/heartbeat",
+                const std::string& heartbeat_topic = "/safety", // heartbeat topic for adamo teleop
                 std::chrono::milliseconds heartbeat_timeout = std::chrono::milliseconds(500),
-                bool check_nonzero_int = false,
+                bool check_status_int = false,
                 int joy_button_index = -1);
 
   bool is_safe() const;
@@ -44,7 +45,7 @@ private:
   rclcpp::Time last_heartbeat_time_;
   bool heartbeat_safe_ = false;
   bool have_heartbeat_ = false;
-  bool check_nonzero_int_ = false;
+  bool check_status_int_ = false;
   int joy_button_index_ = -1;
   bool joystick_safe_ = false;
   bool have_joy_ = false;

@@ -7,18 +7,18 @@ namespace forklift_control {
 SafetyMonitor::SafetyMonitor(rclcpp::Node& node,
                              const std::string& heartbeat_topic,
                              std::chrono::milliseconds heartbeat_timeout,
-                             bool check_nonzero_int,
+                             bool check_status_int,
                              int joy_button_index)
 : clock_(node.get_clock()),
   heartbeat_timeout_(std::chrono::duration_cast<std::chrono::nanoseconds>(heartbeat_timeout)),
   last_heartbeat_time_(0, 0, clock_->get_clock_type()),
-  check_nonzero_int_(check_nonzero_int),
+  check_status_int_(check_status_int),
   joy_button_index_(joy_button_index),
   logger_(node.get_logger())
 {
   // Subscribe to heartbeat (Bool or Int32)
-  if (check_nonzero_int_) {
-    // Subscribe to an Int32 heartbeat and treat non-zero as safe
+  if (check_status_int_) {
+    // Subscribe to an Int32 heartbeat and treat zero as safe
     heartbeat_sub_ = node.create_subscription<std_msgs::msg::Int32>(
       heartbeat_topic,
       rclcpp::SensorDataQoS(),
@@ -60,8 +60,26 @@ void SafetyMonitor::heartbeat_int_cb_(const std_msgs::msg::Int32::SharedPtr msg)
 {
   std::lock_guard<std::mutex> lk(mtx_);
   last_heartbeat_time_ = clock_->now();
-  // Only set safe when the integer field is non-zero
-  heartbeat_safe_ = (msg->data != 0);
+  // Only set safe when the integer field is 0
+  heartbeat_safe_ = (msg->data == 0);
+  if (msg->data == 1) {
+    RCLCPP_WARN(
+      logger_,
+      "Heartbeat Int received: data=1, heartbeat_safe=false, time=%.3f",
+      last_heartbeat_time_.seconds());
+  }
+  if (msg->data == 2) {
+    RCLCPP_WARN(
+      logger_,
+      "Heartbeat Int received: data=2, heartbeat_safe=false, time=%.3f",
+      last_heartbeat_time_.seconds());
+  }
+  if (msg->data == 3) {
+    RCLCPP_WARN(
+      logger_,
+      "Heartbeat Int received: data=3, heartbeat_safe=false, time=%.3f",
+      last_heartbeat_time_.seconds());
+  }
   have_heartbeat_ = true;
   RCLCPP_DEBUG(
     logger_,
