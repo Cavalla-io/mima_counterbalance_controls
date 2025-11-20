@@ -18,11 +18,11 @@ SafetyMonitor::SafetyMonitor(rclcpp::Node& node,
 {
   // Subscribe to heartbeat (Bool or Int32)
   if (check_status_int_) {
-    // Subscribe to an Int32 heartbeat and treat zero as safe
-    heartbeat_sub_ = node.create_subscription<std_msgs::msg::Int32>(
+    // Subscribe to a UInt8 heartbeat and map status codes to safe/unsafe
+    heartbeat_sub_ = node.create_subscription<std_msgs::msg::UInt8>(
       heartbeat_topic,
       rclcpp::SensorDataQoS(),
-      std::bind(&SafetyMonitor::heartbeat_int_cb_, this, std::placeholders::_1));
+      std::bind(&SafetyMonitor::heartbeat_status_cb_, this, std::placeholders::_1));
   } else {
     // Default behaviour: Bool heartbeat
     heartbeat_sub_ = node.create_subscription<std_msgs::msg::Bool>(
@@ -47,6 +47,7 @@ void SafetyMonitor::heartbeat_cb_(const std_msgs::msg::Bool::SharedPtr msg)
   last_heartbeat_time_ = clock_->now();
   // For Bool messages we accept true/false directly
   heartbeat_safe_ = msg->data;
+  last_status_code_ = msg->data ? 0 : 1;
   have_heartbeat_ = true;
   RCLCPP_DEBUG(
     logger_,
@@ -56,35 +57,49 @@ void SafetyMonitor::heartbeat_cb_(const std_msgs::msg::Bool::SharedPtr msg)
     last_heartbeat_time_.seconds());
 }
 
-void SafetyMonitor::heartbeat_int_cb_(const std_msgs::msg::Int32::SharedPtr msg)
+void SafetyMonitor::heartbeat_status_cb_(const std_msgs::msg::UInt8::SharedPtr msg)
 {
   std::lock_guard<std::mutex> lk(mtx_);
   last_heartbeat_time_ = clock_->now();
-  // Only set safe when the integer field is 0
-  heartbeat_safe_ = (msg->data == 0);
-  if (msg->data == 1) {
-    RCLCPP_WARN(
-      logger_,
-      "Heartbeat Int received: data=1, heartbeat_safe=false, time=%.3f",
-      last_heartbeat_time_.seconds());
+  const auto status = msg->data;
+  bool safe = false;
+  last_status_code_ = status;
+  switch (status) {
+    case 0:
+      safe = true;
+      break;
+    case 1:
+      RCLCPP_WARN(
+        logger_,
+        "Heartbeat Status: teleop window unfocused (status=1) -> unsafe at time=%.3f",
+        last_heartbeat_time_.seconds());
+      break;
+    case 2:
+      RCLCPP_WARN(
+        logger_,
+        "Heartbeat Status: high latency (status=2) -> unsafe at time=%.3f",
+        last_heartbeat_time_.seconds());
+      break;
+    case 3:
+      RCLCPP_WARN(
+        logger_,
+        "Heartbeat Status: controller disconnected (status=3) -> unsafe at time=%.3f",
+        last_heartbeat_time_.seconds());
+      break;
+    default:
+      RCLCPP_WARN(
+        logger_,
+        "Heartbeat Status: unknown status=%u -> treating as unsafe at time=%.3f",
+        static_cast<unsigned>(status),
+        last_heartbeat_time_.seconds());
+      break;
   }
-  if (msg->data == 2) {
-    RCLCPP_WARN(
-      logger_,
-      "Heartbeat Int received: data=2, heartbeat_safe=false, time=%.3f",
-      last_heartbeat_time_.seconds());
-  }
-  if (msg->data == 3) {
-    RCLCPP_WARN(
-      logger_,
-      "Heartbeat Int received: data=3, heartbeat_safe=false, time=%.3f",
-      last_heartbeat_time_.seconds());
-  }
+  heartbeat_safe_ = safe;
   have_heartbeat_ = true;
   RCLCPP_DEBUG(
     logger_,
-    "Heartbeat Int received: data=%d, heartbeat_safe=%d, time=%.3f",
-    static_cast<int>(msg->data),
+    "Heartbeat Status received: data=%u, heartbeat_safe=%d, time=%.3f",
+    static_cast<unsigned>(msg->data),
     static_cast<int>(heartbeat_safe_),
     last_heartbeat_time_.seconds());
 }
@@ -183,6 +198,12 @@ bool SafetyMonitor::is_safe() const
     heartbeat_safe_ ? "true" : "false",
     static_cast<int>(heartbeat_safe_));
   return heartbeat_safe_;
+}
+
+int SafetyMonitor::last_status_code() const
+{
+  std::lock_guard<std::mutex> lk(mtx_);
+  return last_status_code_;
 }
 
 }  // namespace forklift_control

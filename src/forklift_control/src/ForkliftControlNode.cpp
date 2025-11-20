@@ -26,6 +26,16 @@ static inline float dz(float x, float d = DEADZONE) {
   return std::copysign(s, x);
 }
 
+static const char* safety_status_str(int code) {
+  switch (code) {
+    case 0: return "SAFE";
+    case 1: return "TELEOP_UNFOCUSED";
+    case 2: return "HIGH_LATENCY";
+    case 3: return "CONTROLLER_DISCONNECTED";
+    default: return "UNKNOWN";
+  }
+}
+
 class ForkliftControlNode : public rclcpp::Node {
 public:
   ForkliftControlNode()
@@ -34,7 +44,7 @@ public:
     can_(declare_parameter<std::string>("can_iface", "can0")),
     drive_(can_, /*node_id=*/declare_parameter<int>("node_id", 3)),
   fork_(can_, drive_, /*node_id*/std::nullopt),
-  safety_(*this, "/safety/heartbeat", 500ms, false, 4)
+  safety_(*this, "/safety", 500ms, true, 4)
   {
     // Initial drive state
     drive_.set_ramps(1.0f, 1.0f);           // accel/decel seconds
@@ -77,15 +87,17 @@ public:
 private:
   void tick_() {
     const bool safety_ok = safety_.is_safe();
+    const int safety_status = safety_.last_status_code();
+    RCLCPP_INFO_THROTTLE(
+      get_logger(), *get_clock(), 1000,
+      "SafetyMonitor status=%d (%s) => safe=%d",
+      safety_status,
+      safety_status_str(safety_status),
+      static_cast<int>(safety_ok));
     drive_.set_safe_state(safety_ok);
 
     if (!joy_.has_message()) {
       apply_safe_outputs_();
-      if (!safety_ok) {
-        RCLCPP_WARN_THROTTLE(
-          get_logger(), *get_clock(), 500,
-          "Safety heartbeat missing or unsafe; controls disabled.");
-      }
       return;
     }
 

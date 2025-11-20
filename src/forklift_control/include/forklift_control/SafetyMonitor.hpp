@@ -6,20 +6,20 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/bool.hpp"
-#include "std_msgs/msg/int32.hpp"
+#include "std_msgs/msg/u_int8.hpp"
 #include "sensor_msgs/msg/joy.hpp"
 
 namespace forklift_control {
 
 class SafetyMonitor {
 public:
-  // If `check_status_int` is true the monitor will subscribe to an Int32 topic and
+  // If `check_status_int` is true the monitor will subscribe to a UInt8 topic and
   // map the heartbeat status as: 0 = safe, 1 = teleop window unfocused (unsafe),
   // 2 = high latency (unsafe), 3 = controller disconnected (unsafe).
   // If `joy_button_index >= 0` the monitor will subscribe to a `sensor_msgs::msg::Joy`
   // topic and interpret the given `buttons[joy_button_index]` values using the same mapping.
   // If `joy_button_index < 0` and `check_status_int` is true the monitor will subscribe to an
-  // `std_msgs::msg::Int32` topic and apply the same safety mapping. Otherwise the default is
+  // `std_msgs::msg::UInt8` topic and apply the same safety mapping. Otherwise the default is
   // a `std_msgs::msg::Bool` topic where true means safe.
   SafetyMonitor(rclcpp::Node& node,
                 const std::string& heartbeat_topic = "/safety", // heartbeat topic for adamo teleop
@@ -28,10 +28,11 @@ public:
                 int joy_button_index = -1);
 
   bool is_safe() const;
+  int last_status_code() const;
 
 private:
   void heartbeat_cb_(const std_msgs::msg::Bool::SharedPtr msg);
-  void heartbeat_int_cb_(const std_msgs::msg::Int32::SharedPtr msg);
+  void heartbeat_status_cb_(const std_msgs::msg::UInt8::SharedPtr msg);
   void heartbeat_joy_cb_(const sensor_msgs::msg::Joy::SharedPtr msg);
 
   // Use a SubscriptionBase to be able to hold subscriptions for multiple message types
@@ -46,6 +47,7 @@ private:
   bool heartbeat_safe_ = false;
   bool have_heartbeat_ = false;
   bool check_status_int_ = false;
+  int last_status_code_ = -1;
   int joy_button_index_ = -1;
   bool joystick_safe_ = false;
   bool have_joy_ = false;
