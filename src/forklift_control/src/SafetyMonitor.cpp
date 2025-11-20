@@ -75,6 +75,7 @@ void SafetyMonitor::heartbeat_status_cb_(const std_msgs::msg::UInt8::SharedPtr m
         last_heartbeat_time_.seconds());
       break;
     case 2:
+      safe = true;
       RCLCPP_WARN(
         logger_,
         "Heartbeat Status: high latency (status=2) -> unsafe at time=%.3f",

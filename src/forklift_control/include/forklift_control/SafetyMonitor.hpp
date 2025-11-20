@@ -15,7 +15,7 @@ class SafetyMonitor {
 public:
   // If `check_status_int` is true the monitor will subscribe to a UInt8 topic and
   // map the heartbeat status as: 0 = safe, 1 = teleop window unfocused (unsafe),
-  // 2 = high latency (unsafe), 3 = controller disconnected (unsafe).
+  // 2 = high latency (safe for now), 3 = controller disconnected (unsafe).
   // If `joy_button_index >= 0` the monitor will subscribe to a `sensor_msgs::msg::Joy`
   // topic and interpret the given `buttons[joy_button_index]` values using the same mapping.
   // If `joy_button_index < 0` and `check_status_int` is true the monitor will subscribe to an
