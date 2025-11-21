@@ -40,7 +40,7 @@ void DriveLogic::set_steering_deg(float deg)
 {
   // scale 0.01 deg/LSB
   int raw = static_cast<int>(std::lround(deg * 100.0f));
-  raw = clampi(raw, -12000, 12000);
+  raw = clampi(raw, -9000, 9000);
   steer_counts_ = static_cast<int16_t>(raw);
   pack_and_send_0x200_();
 }
@@ -82,11 +82,26 @@ void DriveLogic::send_now()
   pack_and_send_0x200_();
 }
 
-void DriveLogic::pack_and_send_0x200_()
+void DriveLogic::pack_and_send_0x200_(bool force)
 {
+  if (!force && !tx_enabled_) {
+    return;
+  }
+
   std::array<uint8_t,8> d{};
   // Byte0
-  d[0] = static_cast<uint8_t>((b0_base_ | dir_mask_ | hyd_mask_) & 0xFF);
+  uint8_t byte0 = static_cast<uint8_t>(b0_base_ & static_cast<uint8_t>(~0x01u));
+  uint8_t hyd = hyd_mask_;
+  if (!safe_state_) {
+    hyd &= static_cast<uint8_t>(~0x30u);  // mask lift/lower bits when unsafe
+  }
+  byte0 = static_cast<uint8_t>((byte0 | dir_mask_ | hyd) & 0xFF);
+  if (safe_state_) {
+    byte0 |= 0x01u;
+  } else {
+    byte0 &= static_cast<uint8_t>(~0x01u);
+  }
+  d[0] = byte0;
   // Bytes1-2: speed int16 LE (non-negative)
   put_i16_le(d, 1, speed_rpm_);
   // Byte3 accel (0.1..25.5 s → 1..255)
@@ -105,6 +120,27 @@ void DriveLogic::pack_and_send_0x200_()
   //              cob_cmd_, d[0], speed_rpm_, d[3], d[4], steer_counts_, d[7]);
 
   can_.send(cob_cmd_, d, 8);
+}
+
+void DriveLogic::set_safe_state(bool safe)
+{
+  if (safe) {
+    const bool was_disabled = !tx_enabled_;
+    safe_state_ = true;
+    tx_enabled_ = true;
+    if (was_disabled) {
+      pack_and_send_0x200_(true);
+    }
+    return;
+  }
+
+  if (!safe_state_ && !tx_enabled_) {
+    return;
+  }
+
+  safe_state_ = false;
+  pack_and_send_0x200_(true);  // send neutral frame with safe bit cleared
+  tx_enabled_ = false;
 }
 
 } // namespace forklift_control

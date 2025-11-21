@@ -3,6 +3,7 @@
 #include "forklift_control/DriveLogic.hpp"
 #include "forklift_control/ForkLogic.hpp"
 #include "forklift_control/SocketCanIface.hpp"
+#include "forklift_control/SafetyMonitor.hpp"
 #include <cmath>
 #include <algorithm>
 
@@ -10,7 +11,7 @@ using namespace std::chrono_literals;
 
 // ---- Tunables (match teleop_ps.py) ----
 static constexpr float MAX_SPEED_RPM   = 1200.0f;
-static constexpr float MAX_STEER_DEG   = 120.0f;
+static constexpr float MAX_STEER_DEG   = 90.0f;
 static constexpr float DEADZONE        = 0.08f;
 static constexpr float FORK_DEADBAND   = 0.05f;
 static constexpr int   LIFT_PWM_MAX    = 100;   // 0..100
@@ -25,12 +26,14 @@ static inline float dz(float x, float d = DEADZONE) {
   return std::copysign(s, x);
 }
 
-// Normalize triggers to [0..1] increasing with press.
-// - If device reports [0..1] idle=1 pressed=0 → invert.
-// - Else assume [-1..1] idle=+1 pressed=-1 → map to [0..1].
-static inline float trig01(float v) {
-  if (v >= 0.f && v <= 1.f) return 1.f - v;
-  return (1.f - v) * 0.5f;
+static const char* safety_status_str(int code) {
+  switch (code) {
+    case 0: return "SAFE";
+    case 1: return "TELEOP_UNFOCUSED";
+    case 2: return "HIGH_LATENCY";
+    case 3: return "CONTROLLER_DISCONNECTED";
+    default: return "UNKNOWN";
+  }
 }
 
 class ForkliftControlNode : public rclcpp::Node {
@@ -40,7 +43,8 @@ public:
     joy_(*this, "/joy"),
     can_(declare_parameter<std::string>("can_iface", "can0")),
     drive_(can_, /*node_id=*/declare_parameter<int>("node_id", 3)),
-    fork_(can_, drive_, /*node_id*/std::nullopt)
+  fork_(can_, drive_, /*node_id*/std::nullopt),
+  safety_(*this, "/safety", 500ms, true, 4)
   {
     // Initial drive state
     drive_.set_ramps(1.0f, 1.0f);           // accel/decel seconds
@@ -70,11 +74,78 @@ public:
       static_cast<unsigned>(0x200 + nodeid),
       static_cast<unsigned>(0x300 + nodeid)
     );
+
+    RCLCPP_WARN(
+      get_logger(),
+      "Safety heartbeat required; forklift remains UNSAFE until heartbeat reports safe.");
+
+    // Parameter: how recent a /joy message must be (ms) to allow one-shot
+    // execution when the safety heartbeat is missing.
+    (void)declare_parameter<int>("recent_joy_window_ms", 200);
   }
 
 private:
   void tick_() {
+    const bool safety_ok = safety_.is_safe();
+    const int safety_status = safety_.last_status_code();
+    RCLCPP_INFO_THROTTLE(
+      get_logger(), *get_clock(), 1000,
+      "SafetyMonitor status=%d (%s) => safe=%d",
+      safety_status,
+      safety_status_str(safety_status),
+      static_cast<int>(safety_ok));
+    drive_.set_safe_state(safety_ok);
+    fork_.set_safe_state(safety_ok);
+
+    if (!joy_.has_message()) {
+      apply_safe_outputs_();
+      return;
+    }
+
     const auto s = joy_.latest();
+
+    if (!first_joy_received_) {
+      first_joy_received_ = true;
+      startup_lockout_active_ = !inputs_neutral_(s);
+      if (startup_lockout_active_) {
+        RCLCPP_WARN(
+          get_logger(),
+          "Joystick startup lockout: release all buttons, triggers, and sticks to enable control.");
+      }
+    }
+
+    if (startup_lockout_active_) {
+      if (!inputs_neutral_(s)) {
+        apply_safe_outputs_();
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 500,
+          "Joystick startup lockout active: release all controls to continue.");
+        return;
+      }
+      startup_lockout_active_ = false;
+      RCLCPP_INFO(get_logger(), "Joystick lockout cleared; controls enabled.");
+    }
+
+      // Allow a one-shot joystick command only if the last /joy message is
+      // very recent (configured by 'recent_joy_window_ms'). Otherwise send
+      // safe outputs and skip processing.
+      bool recent_ok = false;
+      if (joy_.has_message()) {
+        const auto last = joy_.last_msg_time();
+        const auto now = this->get_clock()->now();
+        const auto elapsed_ns = (now - last).nanoseconds();
+        const int ms = static_cast<int>(elapsed_ns / 1000000);
+        const int recent_ms = static_cast<int>(get_parameter("recent_joy_window_ms").as_int());
+        if (ms >= 0 && ms <= recent_ms) recent_ok = true;
+      }
+      if (!recent_ok) {
+        apply_safe_outputs_();
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 500,
+          "Not Seeing Recent Messages");
+        return;
+      }
+      // otherwise fall through and execute the joystick-derived commands once
 
     // --- E-STOP toggle like python (X sets, Y clears) ---
     if (s.X)      estop_ = true;
@@ -83,9 +154,9 @@ private:
     // ----- Drive -----
     const float steer_cmd_deg = dz(s.lx) * MAX_STEER_DEG;
 
-    // Triggers → [0..1] increasing with press (handles both [-1..1] and [0..1] devices)
-    const float lt_n = trig01(s.lt);  // reverse
-    const float rt_n = trig01(s.rt);  // forward
+    // Raw trigger values (assumed already scaled 0..1 increasing with press)
+    const float lt_n = s.lt;  // reverse
+    const float rt_n = s.rt;  // forward
 
     // Direction bits (EPS, RT wins ties)
     constexpr float EPS = 0.05f;
@@ -103,7 +174,7 @@ private:
     }
 
     // ----- Forks (RIGHT STICK Y): up->lift, down->lower -----
-    const float ry_raw    = s.ry;           // many pads: up is negative
+    const float ry_raw    = s.ry;           
     const float lift_cmd  = dz(-ry_raw);    // up to + (0..1)
     const float lower_cmd = dz( ry_raw);    // down to + (0..1)
 
@@ -125,7 +196,7 @@ private:
       fork_status_ = "OFF";
     }
 
-    // Debug (0.5s throttle) showing raw vs normalized triggers too
+    // Debug (0.5s throttle) showing raw trigger values too
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 500,
       "ESTOP=%d  RT=%.2f LT=%.2f  rpm=%s  steer=%+.0f  RY=%+.2f  forks=%s",
@@ -140,11 +211,44 @@ private:
   forklift_control::SocketCanIface can_;
   forklift_control::DriveLogic     drive_;
   forklift_control::ForkLogic      fork_;
+  forklift_control::SafetyMonitor  safety_;
   rclcpp::TimerBase::SharedPtr     ctrl_timer_;
   rclcpp::TimerBase::SharedPtr     ka_drive_timer_;
   rclcpp::TimerBase::SharedPtr     ka_fork_timer_;
   bool        estop_ = false;
+  bool        first_joy_received_ = false;
+  bool        startup_lockout_active_ = false;
   std::string fork_status_ = "OFF";
+
+  bool inputs_neutral_(const forklift_control::JoyState& s) const {
+    constexpr float STICK_THRESH = 0.15f;
+    constexpr float TRIGGER_THRESH = 0.10f;
+
+    if (std::fabs(s.lx) > STICK_THRESH) return false;
+    if (std::fabs(s.ly) > STICK_THRESH) return false;
+    if (std::fabs(s.rx) > STICK_THRESH) return false;
+    if (std::fabs(s.ry) > STICK_THRESH) return false;
+    if (s.lt > TRIGGER_THRESH) return false;
+    if (s.rt > TRIGGER_THRESH) return false;
+
+    if (s.A || s.B || s.X || s.Y ||
+        s.LB || s.RB ||
+        s.SELECT || s.START) {
+      return false;
+    }
+
+    return true;
+  }
+
+  void apply_safe_outputs_() {
+    drive_.set_direction_lowbits(false, false);
+    drive_.set_speed_rpm(0.0f);
+    drive_.set_steering_deg(0.0f);
+    fork_.stop_hydraulics();
+    fork_status_ = "OFF";
+  }
+
+  // zero-timer / one-shot behavior removed; tick_() handles recent-joy checks
 };
 
 int main(int argc, char** argv)

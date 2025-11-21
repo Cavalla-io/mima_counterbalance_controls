@@ -13,6 +13,10 @@ JoyReader::JoyReader(rclcpp::Node& node,
                      const std::string& topic,
                      const rclcpp::QoS& qos)
 {
+  // keep a clock reference to timestamp incoming messages
+  clock_ = node.get_clock();
+  last_msg_time_ = rclcpp::Time(0, 0, clock_->get_clock_type());
+
   sub_ = node.create_subscription<Joy>(
     topic, qos,
     std::bind(&JoyReader::cb_, this, std::placeholders::_1));
@@ -41,12 +45,26 @@ void JoyReader::cb_(const Joy::SharedPtr msg)
 
   std::lock_guard<std::mutex> lk(mtx_);
   state_ = s;
+  have_data_ = true;
+  last_msg_time_ = clock_->now();
+}
+
+rclcpp::Time JoyReader::last_msg_time() const
+{
+  std::lock_guard<std::mutex> lk(mtx_);
+  return last_msg_time_;
 }
 
 JoyState JoyReader::latest() const
 {
   std::lock_guard<std::mutex> lk(mtx_);
   return state_;
+}
+
+bool JoyReader::has_message() const
+{
+  std::lock_guard<std::mutex> lk(mtx_);
+  return have_data_;
 }
 
 } // namespace forklift_control

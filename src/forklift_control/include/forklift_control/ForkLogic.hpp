@@ -16,12 +16,13 @@ public:
   void lift_pwm(int pwm_0_100);         // LIFT: lift solenoid ON, descent=0, pump=PWM
   void lower_valve(int valve_0_200);    // LOWER: pump=0, lower solenoid ON, descent=valve
   void stop_hydraulics();               // STOP: pump=0, both solenoids OFF, descent=0
-
+  
   // Low-level setters
   void set_pump_pwm(int pwm_0_100);     // 0..100
   void set_pump_ramps(std::optional<float> accel_time_s,
                       std::optional<float> decel_time_s); // each 0.1..25.5 s
   void keepalive();                     // resend last 0x300 frame
+  void set_safe_state(bool safe);       // mask outputs when unsafe
 
   // Optional: attach bits if you need them later
   void set_attach2l(bool on) { attach2l_ = on; }
@@ -56,6 +57,8 @@ private:
   int   ac_pump_rpm_      = 0;    // Byte3 (kept for parity; unused -> 0)
   float pump_accel_s_     = 1.0f; // Byte4 (0.1..25.5 -> 1..255)
   float pump_decel_s_     = 1.0f; // Byte6 (0.1..25.5 -> 1..255)
+
+  bool  safe_state_       = true;
 };
 
 } // namespace forklift_control

@@ -39,6 +39,7 @@ public:
   void set_lift_solenoid(bool on);   // bit5 (0x20)
   void set_lower_solenoid(bool on);  // bit4 (0x10)
   void set_descent_valve(int value_0_200);   // Byte7
+  void set_safe_state(bool safe);    // bit0 (0x01)
 
   // Convenience
   void send_now();                    // pack current fields and send
@@ -47,7 +48,7 @@ public:
 
 private:
   // helpers
-  void pack_and_send_0x200_();       // builds 8 bytes (per your Python) and sends
+  void pack_and_send_0x200_(bool force = false);       // builds 8 bytes (per your Python) and sends
   static int clampi(int v, int lo, int hi);
   static float clampf(float v, float lo, float hi);
   static void put_i16_le(std::array<uint8_t,8>& b, int off, int16_t v);
@@ -65,6 +66,8 @@ private:
   // byte0 submasks
   uint8_t dir_mask_ = 0x00;            // 0x02 RT, 0x04 LT
   uint8_t hyd_mask_ = 0x00;            // 0x10 lower, 0x20 lift
+  bool    safe_state_ = false;         // bit0 (0x01)
+  bool    tx_enabled_ = true;          // allow CAN sends when true
 
   // other payload fields
   int16_t speed_rpm_ = 0;              // magnitude only (>=0)
