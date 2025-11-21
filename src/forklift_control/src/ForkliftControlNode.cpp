@@ -11,7 +11,7 @@ using namespace std::chrono_literals;
 
 // ---- Tunables (match teleop_ps.py) ----
 static constexpr float MAX_SPEED_RPM   = 1200.0f;
-static constexpr float MAX_STEER_DEG   = 180.0f;
+static constexpr float MAX_STEER_DEG   = 90.0f;
 static constexpr float DEADZONE        = 0.08f;
 static constexpr float FORK_DEADBAND   = 0.05f;
 static constexpr int   LIFT_PWM_MAX    = 100;   // 0..100
