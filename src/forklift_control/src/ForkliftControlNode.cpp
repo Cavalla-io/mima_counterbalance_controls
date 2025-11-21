@@ -11,7 +11,7 @@ using namespace std::chrono_literals;
 
 // ---- Tunables (match teleop_ps.py) ----
 static constexpr float MAX_SPEED_RPM   = 1200.0f;
-static constexpr float MAX_STEER_DEG   = 120.0f;
+static constexpr float MAX_STEER_DEG   = 180.0f;
 static constexpr float DEADZONE        = 0.08f;
 static constexpr float FORK_DEADBAND   = 0.05f;
 static constexpr int   LIFT_PWM_MAX    = 100;   // 0..100
@@ -95,6 +95,7 @@ private:
       safety_status_str(safety_status),
       static_cast<int>(safety_ok));
     drive_.set_safe_state(safety_ok);
+    fork_.set_safe_state(safety_ok);
 
     if (!joy_.has_message()) {
       apply_safe_outputs_();
@@ -173,7 +174,7 @@ private:
     }
 
     // ----- Forks (RIGHT STICK Y): up->lift, down->lower -----
-    const float ry_raw    = s.ry;           // many pads: up is negative
+    const float ry_raw    = s.ry;           
     const float lift_cmd  = dz(-ry_raw);    // up to + (0..1)
     const float lower_cmd = dz( ry_raw);    // down to + (0..1)
 

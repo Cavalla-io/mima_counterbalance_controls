@@ -48,7 +48,7 @@ public:
 
 private:
   // helpers
-  void pack_and_send_0x200_();       // builds 8 bytes (per your Python) and sends
+  void pack_and_send_0x200_(bool force = false);       // builds 8 bytes (per your Python) and sends
   static int clampi(int v, int lo, int hi);
   static float clampf(float v, float lo, float hi);
   static void put_i16_le(std::array<uint8_t,8>& b, int off, int16_t v);
@@ -67,6 +67,7 @@ private:
   uint8_t dir_mask_ = 0x00;            // 0x02 RT, 0x04 LT
   uint8_t hyd_mask_ = 0x00;            // 0x10 lower, 0x20 lift
   bool    safe_state_ = false;         // bit0 (0x01)
+  bool    tx_enabled_ = true;          // allow CAN sends when true
 
   // other payload fields
   int16_t speed_rpm_ = 0;              // magnitude only (>=0)

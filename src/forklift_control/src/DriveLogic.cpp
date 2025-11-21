@@ -82,12 +82,20 @@ void DriveLogic::send_now()
   pack_and_send_0x200_();
 }
 
-void DriveLogic::pack_and_send_0x200_()
+void DriveLogic::pack_and_send_0x200_(bool force)
 {
+  if (!force && !tx_enabled_) {
+    return;
+  }
+
   std::array<uint8_t,8> d{};
   // Byte0
   uint8_t byte0 = static_cast<uint8_t>(b0_base_ & static_cast<uint8_t>(~0x01u));
-  byte0 = static_cast<uint8_t>((byte0 | dir_mask_ | hyd_mask_) & 0xFF);
+  uint8_t hyd = hyd_mask_;
+  if (!safe_state_) {
+    hyd &= static_cast<uint8_t>(~0x30u);  // mask lift/lower bits when unsafe
+  }
+  byte0 = static_cast<uint8_t>((byte0 | dir_mask_ | hyd) & 0xFF);
   if (safe_state_) {
     byte0 |= 0x01u;
   } else {
@@ -116,9 +124,23 @@ void DriveLogic::pack_and_send_0x200_()
 
 void DriveLogic::set_safe_state(bool safe)
 {
-  if (safe == safe_state_) return;
-  safe_state_ = safe;
-  pack_and_send_0x200_();
+  if (safe) {
+    const bool was_disabled = !tx_enabled_;
+    safe_state_ = true;
+    tx_enabled_ = true;
+    if (was_disabled) {
+      pack_and_send_0x200_(true);
+    }
+    return;
+  }
+
+  if (!safe_state_ && !tx_enabled_) {
+    return;
+  }
+
+  safe_state_ = false;
+  pack_and_send_0x200_(true);  // send neutral frame with safe bit cleared
+  tx_enabled_ = false;
 }
 
 } // namespace forklift_control

@@ -63,6 +63,10 @@ void ForkLogic::keepalive()
 // ---- pack & send ----
 void ForkLogic::send_0x300_()
 {
+  if (!safe_state_) {
+    return;  // suppress CAN traffic while unsafe
+  }
+
   std::array<uint8_t,8> d{};
   // Byte0: attachments
   uint8_t b0 = 0;
@@ -84,6 +88,22 @@ void ForkLogic::send_0x300_()
   d[7] = 0;                                        // reserved
 
   can_.send(cob_pump_, d, 8);
+}
+
+void ForkLogic::set_safe_state(bool safe)
+{
+  if (safe == safe_state_) return;
+
+  if (!safe && safe_state_) {
+    // send a neutral frame before disabling future transmissions
+    stop_hydraulics();
+  }
+
+  safe_state_ = safe;
+
+  if (safe_state_) {
+    send_0x300_();
+  }
 }
 
 } // namespace forklift_control
