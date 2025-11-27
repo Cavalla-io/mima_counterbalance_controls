@@ -88,6 +88,7 @@ void SafetyMonitor::heartbeat_status_cb_(const std_msgs::msg::UInt8::SharedPtr m
         last_heartbeat_time_.seconds());
       break;
     default:
+    safe = true;
       RCLCPP_WARN(
         logger_,
         "Heartbeat Status: unknown status=%u -> treating as unsafe at time=%.3f",
