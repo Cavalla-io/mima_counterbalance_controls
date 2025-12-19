@@ -76,15 +76,23 @@ void ForkLogic::send_0x300_()
   b0 |= static_cast<uint8_t>(attach3r_ ? 1u : 0u) << 3;
   d[0] = b0;
 
-  d[1] = 0;                                        // reserved
-  d[2] = static_cast<uint8_t>(pump_pwm_0_100_);    // pump PWM 0..100
-  d[3] = static_cast<uint8_t>(ac_pump_rpm_ & 0xFF);// reserved / aux
-  // accel time (0.1..25.5) -> 1..255
+  d[1] = 0;                                        // reserved (Battery Level)
+  d[2] = 0;                                        // reserved (Was PWM)
+
+  // Byte3-4: Pump Speed RPM (0-5000) mapped from pump_pwm_0_100_
+  // 100% -> 5000 RPM => multiplier 50
+  uint16_t rpm = static_cast<uint16_t>(pump_pwm_0_100_ * 50);
+  d[3] = static_cast<uint8_t>(rpm & 0xFF);
+  d[4] = static_cast<uint8_t>((rpm >> 8) & 0xFF);
+
+  // Byte5: pump accel (0.1..25.5 -> 1..255)
   int accel_u8 = clampi(static_cast<int>(std::lround(pump_accel_s_ * 10.f)), 1, 255);
-  d[4] = static_cast<uint8_t>(accel_u8);
-  d[5] = 0;                                        // reserved
+  d[5] = static_cast<uint8_t>(accel_u8);
+
+  // Byte6: pump decel
   int decel_u8 = clampi(static_cast<int>(std::lround(pump_decel_s_ * 10.f)), 1, 255);
   d[6] = static_cast<uint8_t>(decel_u8);
+  
   d[7] = 0;                                        // reserved
 
   can_.send(cob_pump_, d, 8);

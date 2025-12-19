@@ -54,7 +54,6 @@ private:
   bool attach3r_ = false;
 
   int   pump_pwm_0_100_   = 0;    // Byte2
-  int   ac_pump_rpm_      = 0;    // Byte3 (kept for parity; unused -> 0)
   float pump_accel_s_     = 1.0f; // Byte4 (0.1..25.5 -> 1..255)
   float pump_decel_s_     = 1.0f; // Byte6 (0.1..25.5 -> 1..255)
 
