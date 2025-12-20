@@ -39,7 +39,7 @@ void DriveLogic::set_speed_rpm(float rpm_nonneg)
 void DriveLogic::set_steering_deg(float deg)
 {
   // scale 0.01 deg/LSB
-  int raw = static_cast<int>(std::lround(deg * 100.0f));
+  int raw = static_cast<int>(std::lround(-deg * 100.0f));
   raw = clampi(raw, -9000, 9000);
   steer_counts_ = static_cast<int16_t>(raw);
   pack_and_send_0x200_();
