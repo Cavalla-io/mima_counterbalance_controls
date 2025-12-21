@@ -82,9 +82,17 @@ void SafetyMonitor::heartbeat_status_cb_(const std_msgs::msg::UInt8::SharedPtr m
         last_heartbeat_time_.seconds());
       break;
     case 3:
+      safe = true;
       RCLCPP_WARN(
         logger_,
-        "Heartbeat Status: controller disconnected (status=3) -> unsafe at time=%.3f",
+        "Heartbeat Status: controller disconnected (status=3) -> TREATING AS SAFE at time=%.3f",
+        last_heartbeat_time_.seconds());
+      break;
+    case 4:
+      safe = true;
+      RCLCPP_WARN(
+        logger_,
+        "Heartbeat Status: heartbeat missing (status=4) -> TREATING AS SAFE at time=%.3f",
         last_heartbeat_time_.seconds());
       break;
     default:

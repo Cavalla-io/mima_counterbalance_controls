@@ -17,6 +17,10 @@ public:
   void lower_valve(int valve_0_200);    // LOWER: pump=0, lower solenoid ON, descent=valve
   void stop_hydraulics();               // STOP: pump=0, both solenoids OFF, descent=0
   
+  // Aux (Tilt/Sideshift)
+  void set_tilt(int pwm_speed);         // -100..100 (negative=Left/Back, positive=Right/Fwd)
+  void set_sideshift(int pwm_speed);    // -100..100 (negative=Left, positive=Right)
+
   // Low-level setters
   void set_pump_pwm(int pwm_0_100);     // 0..100
   void set_pump_ramps(std::optional<float> accel_time_s,

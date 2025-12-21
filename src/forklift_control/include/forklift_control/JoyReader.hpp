@@ -8,6 +8,7 @@ namespace forklift_control {
 
 struct JoyState {
   float lx=0.f, ly=0.f, rx=0.f, ry=0.f, lt=0.f, rt=0.f;
+  float dpad_x=0.f, dpad_y=0.f;
   int A=0, B=0, X=0, Y=0, LB=0, RB=0, SELECT=0, START=0;
 };
 

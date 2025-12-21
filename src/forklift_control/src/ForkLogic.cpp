@@ -36,6 +36,29 @@ void ForkLogic::stop_hydraulics()
   drive_.set_descent_valve(0);
   drive_.set_lift_solenoid(false);
   drive_.set_lower_solenoid(false);
+  
+  // also clear aux bits? Standard practice usually yes for safety
+  attach2l_ = false; attach2r_ = false;
+  attach3l_ = false; attach3r_ = false;
+  // trigger update if needed, but set_pump_pwm(0) just sent one.
+  // we should resend if we changed bits.
+  send_0x300_();
+}
+
+void ForkLogic::set_tilt(int pwm_speed)
+{
+  int pwm = clampi(pwm_speed, -100, 100);
+  attach2r_ = (pwm > 0);
+  attach2l_ = (pwm < 0);
+  set_pump_pwm(std::abs(pwm)); // sends 0x300
+}
+
+void ForkLogic::set_sideshift(int pwm_speed)
+{
+  int pwm = clampi(pwm_speed, -100, 100);
+  attach3r_ = (pwm > 0);
+  attach3l_ = (pwm < 0);
+  set_pump_pwm(std::abs(pwm)); // sends 0x300
 }
 
 // ---- Low-level setters ----

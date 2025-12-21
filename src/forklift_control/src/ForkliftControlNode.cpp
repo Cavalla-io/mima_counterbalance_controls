@@ -10,12 +10,13 @@
 using namespace std::chrono_literals;
 
 // ---- Tunables (match teleop_ps.py) ----
-static constexpr float MAX_SPEED_RPM   = 1200.0f;
-static constexpr float MAX_STEER_DEG   = 90.0f;
+static constexpr float MAX_SPEED_RPM   = 1200.0f; // max = 4000
+static constexpr float MAX_STEER_DEG   = 90.0f; // maybe we should reduce this in trucks?
 static constexpr float DEADZONE        = 0.08f;
 static constexpr float FORK_DEADBAND   = 0.05f;
-static constexpr int   LIFT_PWM_MAX    = 100;   // 0..100
-static constexpr int   LOWER_VALVE_MAX = 200;   // 0..200
+static constexpr int   LIFT_PWM_MAX    = 65;    // 0..100 reduced from 100
+static constexpr int   LOWER_VALVE_MAX = 80;    // 0..200 reduced from 200
+static constexpr int   AUX_PWM         = 50;    // Tilt/Sideshift speed
 
 // Deadzone + rescale [-1..1]
 static inline float dz(float x, float d = DEADZONE) {
@@ -44,7 +45,7 @@ public:
     can_(declare_parameter<std::string>("can_iface", "can0")),
     drive_(can_, /*node_id=*/declare_parameter<int>("node_id", 3)),
   fork_(can_, drive_, /*node_id*/std::nullopt),
-  safety_(*this, "/safety", 500ms, true, 4)
+  safety_(*this, "/safety", 1000ms, true, 4)
   {
     // Initial drive state
     drive_.set_ramps(1.0f, 1.0f);           // accel/decel seconds
@@ -188,8 +189,24 @@ private:
         fork_.lower_valve(valve);
         fork_status_ = "LOWER " + std::to_string(valve);
       } else {
-        fork_.stop_hydraulics();
-        fork_status_ = "OFF";
+        // Aux functions (D-pad)
+        // Priority: Tilt > Sideshift
+        if (s.dpad_y > 0.5f) {       // Up
+          fork_.set_tilt(AUX_PWM);
+          fork_status_ = "TILT FWD";
+        } else if (s.dpad_y < -0.5f) { // Down
+          fork_.set_tilt(-AUX_PWM);
+          fork_status_ = "TILT BACK";
+        } else if (s.dpad_x > 0.5f) {  // Left (or Right depending on mapping)
+          fork_.set_sideshift(-AUX_PWM); // Left?
+          fork_status_ = "SHIFT LEFT";
+        } else if (s.dpad_x < -0.5f) { // Right
+          fork_.set_sideshift(AUX_PWM);  // Right?
+          fork_status_ = "SHIFT RIGHT";
+        } else {
+          fork_.stop_hydraulics();
+          fork_status_ = "OFF";
+        }
       }
     } else {
       fork_.stop_hydraulics();
@@ -199,10 +216,11 @@ private:
     // Debug (0.5s throttle) showing raw trigger values too
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 500,
-      "ESTOP=%d  RT=%.2f LT=%.2f  rpm=%s  steer=%+.0f  RY=%+.2f  forks=%s",
+      "ESTOP=%d  RT=%.2f LT=%.2f  rpm=%s  steer=%+.0f  RY=%+.2f  DPAD=(%.2f, %.2f) forks=%s",
       (int)estop_, rt_n, lt_n,
       (!estop_ ? "active" : "0"),
       steer_cmd_deg, ry_raw,
+      s.dpad_x, s.dpad_y,
       fork_status_.c_str());
   }
 
@@ -228,6 +246,8 @@ private:
     if (std::fabs(s.ly) > STICK_THRESH) return false;
     if (std::fabs(s.rx) > STICK_THRESH) return false;
     if (std::fabs(s.ry) > STICK_THRESH) return false;
+    if (std::fabs(s.dpad_x) > STICK_THRESH) return false;
+    if (std::fabs(s.dpad_y) > STICK_THRESH) return false;
     if (s.lt > TRIGGER_THRESH) return false;
     if (s.rt > TRIGGER_THRESH) return false;
 
@@ -248,7 +268,6 @@ private:
     fork_status_ = "OFF";
   }
 
-  // zero-timer / one-shot behavior removed; tick_() handles recent-joy checks
 };
 
 int main(int argc, char** argv)

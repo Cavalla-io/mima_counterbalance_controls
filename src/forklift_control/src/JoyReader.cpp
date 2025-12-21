@@ -34,6 +34,18 @@ void JoyReader::cb_(const Joy::SharedPtr msg)
   s.ry = axis(3);
   s.lt = axis(4);
   s.rt = axis(5);
+  
+  // D-pad buttons: Up(11), Down(12), Left(13), Right(14)
+  float dy = 0.f;
+  if (btn(11)) dy += 1.0f;
+  if (btn(12)) dy -= 1.0f;
+  s.dpad_y = dy;
+
+  float dx = 0.f;
+  if (btn(13)) dx += 1.0f; // Left positive (matches previous logic)
+  if (btn(14)) dx -= 1.0f; // Right negative
+  s.dpad_x = dx;
+
   s.A  = btn(0);
   s.B  = btn(1);
   s.X  = btn(2);
