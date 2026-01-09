@@ -24,7 +24,7 @@
             "length_bits": 8,
             "type": "bitmap",
             "bits": {
-              "0": "enable_interlock_brake_release",
+              "0": "enable_interlock_brake_release", 
               "1": "enable_forward",
               "2": "enable_reverse",
               "3": "reserved_clutch",
