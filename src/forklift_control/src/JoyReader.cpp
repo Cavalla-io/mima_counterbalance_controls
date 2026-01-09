@@ -42,7 +42,7 @@ void JoyReader::cb_(const Joy::SharedPtr msg)
   s.dpad_y = dy;
 
   float dx = 0.f;
-  if (btn(13)) dx += 1.0f; // Left positive (matches previous logic)
+  if (btn(13)) dx += 1.0f; // Left positive 
   if (btn(14)) dx -= 1.0f; // Right negative
   s.dpad_x = dx;
 

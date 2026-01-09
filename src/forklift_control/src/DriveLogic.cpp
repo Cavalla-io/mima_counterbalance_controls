@@ -31,7 +31,7 @@ void DriveLogic::set_speed_rpm(float rpm_nonneg)
 {
   // magnitude only (direction is in low bits of Byte0)
   int r = static_cast<int>(std::lround(std::fabs(rpm_nonneg)));
-  r = clampi(r, 0, 4000);
+  r = clampi(r, 0, 2500);
   speed_rpm_ = static_cast<int16_t>(r);
   pack_and_send_0x200_();
 }
@@ -39,7 +39,7 @@ void DriveLogic::set_speed_rpm(float rpm_nonneg)
 void DriveLogic::set_steering_deg(float deg)
 {
   // scale 0.01 deg/LSB
-  int raw = static_cast<int>(std::lround(-deg * 100.0f));
+  int raw = static_cast<int>(std::lround(-deg * 100.0f));  // was 100
   raw = clampi(raw, -9000, 9000);
   steer_counts_ = static_cast<int16_t>(raw);
   pack_and_send_0x200_();
