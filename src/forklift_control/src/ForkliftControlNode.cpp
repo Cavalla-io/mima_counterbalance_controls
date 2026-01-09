@@ -1,4 +1,5 @@
 #include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "forklift_control/JoyReader.hpp"
 #include "forklift_control/DriveLogic.hpp"
 #include "forklift_control/ForkLogic.hpp"
@@ -65,6 +66,9 @@ public:
     ka_drive_timer_ = create_wall_timer(200ms, [this]{ drive_.send_now(); });
     ka_fork_timer_  = create_wall_timer(200ms, [this]{ fork_.keepalive(); });
 
+    // Publish drive status
+    drive_status_pub_ = create_publisher<std_msgs::msg::Bool>("/forklift/drive_status", 10);
+
     const auto iface  = get_parameter("can_iface").as_string();
     const int  nodeid = static_cast<int>(get_parameter("node_id").as_int());
     RCLCPP_INFO(
@@ -97,6 +101,11 @@ private:
       static_cast<int>(safety_ok));
     drive_.set_safe_state(safety_ok);
     fork_.set_safe_state(safety_ok);
+
+    // Publish current drive status
+    std_msgs::msg::Bool status_msg;
+    status_msg.data = safety_ok;
+    drive_status_pub_->publish(status_msg);
 
     if (!joy_.has_message()) {
       apply_safe_outputs_();
@@ -233,6 +242,7 @@ private:
   rclcpp::TimerBase::SharedPtr     ctrl_timer_;
   rclcpp::TimerBase::SharedPtr     ka_drive_timer_;
   rclcpp::TimerBase::SharedPtr     ka_fork_timer_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr drive_status_pub_;
   bool        estop_ = false;
   bool        first_joy_received_ = false;
   bool        startup_lockout_active_ = false;
