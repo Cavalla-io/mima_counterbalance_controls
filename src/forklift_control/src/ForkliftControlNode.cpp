@@ -19,6 +19,11 @@ static constexpr int   LIFT_PWM_MAX    = 65;    // 0..100 reduced from 100
 static constexpr int   LOWER_VALVE_MAX = 80;    // 0..200 reduced from 200
 static constexpr int   AUX_PWM         = 50;    // Tilt/Sideshift speed
 
+// Steering Map Tunables
+static constexpr float TURN_SPEED_SCALE = 0.4f; // 40% speed at max turn
+static constexpr float STRAIGHT_ACCEL_S = 1.0f;
+static constexpr float TURN_ACCEL_S     = 2.5f; // Slower acceleration in turn
+
 // Deadzone + rescale [-1..1]
 static inline float dz(float x, float d = DEADZONE) {
   float ax = std::fabs(x);
@@ -175,7 +180,21 @@ private:
     drive_.set_direction_lowbits(!estop_ && rt_active, !estop_ && lt_active);
 
     if (!estop_) {
-      float rpm_mag  = (rt_active ? rt_n : (lt_active ? lt_n : 0.f)) * MAX_SPEED_RPM;
+      // Dynamic limits based on steering
+      const float steer_ratio = std::min(1.0f, std::fabs(steer_cmd_deg) / MAX_STEER_DEG);
+      
+      // Speed Scale: Linear reduction
+      const float speed_scale = 1.0f - (steer_ratio * (1.0f - TURN_SPEED_SCALE));
+      const float current_max_rpm = MAX_SPEED_RPM * speed_scale;
+
+      // Accel Time: Linear increase (slower accel)
+      const float current_accel = STRAIGHT_ACCEL_S + (steer_ratio * (TURN_ACCEL_S - STRAIGHT_ACCEL_S));
+      if (std::fabs(current_accel - last_accel_s_) > 0.05f) {
+        drive_.set_ramps(current_accel, current_accel);
+        last_accel_s_ = current_accel;
+      }
+
+      float rpm_mag  = (rt_active ? rt_n : (lt_active ? lt_n : 0.f)) * current_max_rpm;
       float rpm_send = (rpm_mag > 0.f) ? std::max(50.f, rpm_mag) : 0.f; // min 50 rpm if moving
       drive_.set_speed_rpm(rpm_send);
       drive_.set_steering_deg(steer_cmd_deg);
@@ -247,6 +266,7 @@ private:
   bool        first_joy_received_ = false;
   bool        startup_lockout_active_ = false;
   std::string fork_status_ = "OFF";
+  float       last_accel_s_ = STRAIGHT_ACCEL_S;
 
   bool inputs_neutral_(const forklift_control::JoyState& s) const {
     constexpr float STICK_THRESH = 0.15f;
