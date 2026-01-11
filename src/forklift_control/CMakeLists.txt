@@ -41,6 +41,15 @@ target_include_directories(ForkliftControlNode PUBLIC include)
 target_link_libraries(ForkliftControlNode joy_reader drive_logic fork_logic safety_monitor socketcan_iface)
 ament_target_dependencies(ForkliftControlNode rclcpp sensor_msgs std_msgs)
 
+install(DIRECTORY launch/
+  DESTINATION share/${PROJECT_NAME}/launch
+)
+
+install(PROGRAMS
+  scripts/robot_status.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 install(TARGETS
   joy_reader
   drive_logic
