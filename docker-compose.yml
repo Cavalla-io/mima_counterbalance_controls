@@ -1,0 +1,18 @@
+version: '3.8'
+services:
+  robot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: forklift_control
+    stdin_open: true
+    tty: true
+    privileged: true
+    network_mode: host
+    volumes:
+      - /dev:/dev
+      - ./config:/ros_ws/config:ro
+      - ./logs:/ros_ws/logs
+    environment:
+      - ROS_DOMAIN_ID=0
+      - ROS_LOCALHOST_ONLY=0
