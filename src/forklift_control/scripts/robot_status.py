@@ -21,7 +21,7 @@ class RobotStatusAggregator(Node):
         }
         
         # Subscriptions
-        self.create_subscription(Int8, '/pallet_status', self.pallete_stauts, qos)
+        self.create_subscription(Int8, '/inductive_sensors', self.pallete_stauts, qos)
         self.create_subscription(Float32, '/temperature', self.temp_cb, qos)
         self.create_subscription(Bool, '/forklift/drive_status', self.mode_cb, qos)
         
