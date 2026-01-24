@@ -15,6 +15,9 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip3 install --no-cache-dir --break-system-packages python-can numpy pyyaml
 
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD tmux list-sessions 2>/dev/null || exit 1
+
 # Copy tmux config
 COPY docker/.tmux.conf /root/.tmux.conf
 

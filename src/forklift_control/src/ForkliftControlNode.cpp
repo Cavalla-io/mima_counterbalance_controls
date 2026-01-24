@@ -67,9 +67,11 @@ public:
 
     // Control @ 50 Hz
     ctrl_timer_ = create_wall_timer(20ms, [this]{ this->tick_(); });
-    // Keepalives: resend last 0x200 and 0x300 frames periodically
-    ka_drive_timer_ = create_wall_timer(200ms, [this]{ drive_.send_now(); });
-    ka_fork_timer_  = create_wall_timer(200ms, [this]{ fork_.keepalive(); });
+    // Keepalives: resend last 0x200 and 0x300 frames periodically (only when CAN is up)
+    ka_drive_timer_ = create_wall_timer(200ms, [this]{ if (can_.is_ok()) drive_.send_now(); });
+    ka_fork_timer_  = create_wall_timer(200ms, [this]{ if (can_.is_ok()) fork_.keepalive(); });
+    // CAN reconnect timer: attempt to reconnect every second if CAN is down
+    can_reconnect_timer_ = create_wall_timer(1000ms, [this]{ this->try_can_reconnect_(); });
 
     // Publish drive status
     drive_status_pub_ = create_publisher<std_msgs::msg::Bool>("/forklift/drive_status", 10);
@@ -95,7 +97,27 @@ public:
   }
 
 private:
+  void try_can_reconnect_() {
+    if (can_.is_ok()) return;
+
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 5000,
+      "CAN bus is down, attempting to reconnect...");
+
+    if (can_.try_reconnect()) {
+      RCLCPP_INFO(get_logger(), "CAN bus reconnected successfully");
+    }
+  }
+
   void tick_() {
+    // Check CAN bus health - don't process or publish if CAN is down
+    if (!can_.is_ok()) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 1000,
+        "CAN bus is down - skipping control loop");
+      return;
+    }
+
     const bool safety_ok = safety_.is_safe();
     const int safety_status = safety_.last_status_code();
     RCLCPP_INFO_THROTTLE(
@@ -261,6 +283,7 @@ private:
   rclcpp::TimerBase::SharedPtr     ctrl_timer_;
   rclcpp::TimerBase::SharedPtr     ka_drive_timer_;
   rclcpp::TimerBase::SharedPtr     ka_fork_timer_;
+  rclcpp::TimerBase::SharedPtr     can_reconnect_timer_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr drive_status_pub_;
   bool        estop_ = false;
   bool        first_joy_received_ = false;
