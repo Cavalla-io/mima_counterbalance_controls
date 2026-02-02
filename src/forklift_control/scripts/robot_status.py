@@ -18,13 +18,21 @@ class RobotStatusAggregator(Node):
             'pallet_status': 0,
             'temperature': 0.0,
             'mode': 'unknown',
+            'fork_height': 0.0,
+            'fork_status': 0,
         }
         
         # Subscriptions
         self.create_subscription(Int8, '/inductive_sensors', self.pallete_stauts, qos)
         self.create_subscription(Float32, '/temperature', self.temp_cb, qos)
         self.create_subscription(Bool, '/forklift/drive_status', self.mode_cb, qos)
-        
+        self.create_subscription(
+            String, 
+            '/fork_position'
+            self.json_status_cb, 
+            qos
+        )
+
         # Publisher
         self.pub = self.create_publisher(String, '/robot_status', qos)
         self.timer = self.create_timer(0.1, self.publish)  # 10 Hz
@@ -37,6 +45,15 @@ class RobotStatusAggregator(Node):
 
     def mode_cb(self, msg):
         self.status['mode'] = msg.data
+
+    def json_status_cb(self, msg):
+        try:
+            # I'm ignoring the description because we don't need it here
+            data = json.loads(msg.data)
+            self.status['fork_height'] = data.get('height', 0.0)
+            self.status['fork_status'] = data.get('status', 0)
+        except (json.JSONDecodeError, TypeError):
+            self.get_logger().warn("Received malformed JSON on /fork_position")
 
     def publish(self):
         msg = String()
