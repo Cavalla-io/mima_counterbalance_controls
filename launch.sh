@@ -3,11 +3,12 @@ set -e
 
 source /opt/ros/jazzy/setup.bash
 source /ros_ws/install/setup.bash
-
+# ip link set up can0 type can bitrate 250000
 tmux new-session -d -s robot
 
 # Control
 tmux rename-window -t robot:0 'control_node'
+# tmux send-keys -t robot:0 'ip link set up can0 type can bitrate 250000' Enter
 tmux send-keys -t robot:0 'ros2 launch forklift_control control.launch.py' Enter
 
 tmux attach -t robot
