@@ -18,12 +18,14 @@ class RobotStatusAggregator(Node):
             'pallet_status': 0,
             'temperature': 0.0,
             'mode': 'unknown',
+            'fork_positon': 'unknown',
         }
         
         # Subscriptions
         self.create_subscription(Int8, '/inductive_sensors', self.pallete_stauts, qos)
         self.create_subscription(Float32, '/temperature', self.temp_cb, qos)
         self.create_subscription(Bool, '/forklift/drive_status', self.mode_cb, qos)
+        self.create_subscription(String, '/fork_position', self.fork_position, qos)
         
         # Publisher
         self.pub = self.create_publisher(String, '/robot_status', qos)
@@ -31,6 +33,9 @@ class RobotStatusAggregator(Node):
 
     def pallete_stauts(self, msg):
         self.status['pallet_status'] = msg.data
+    
+    def fork_position(self, msg):
+        self.status['fork_position'] = msg.data
 
     def temp_cb(self, msg):
         self.status['temperature'] = msg.data
