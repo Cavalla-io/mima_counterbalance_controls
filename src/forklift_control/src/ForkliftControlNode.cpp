@@ -4,6 +4,7 @@
 #include "forklift_control/ForkLogic.hpp"
 #include "forklift_control/SocketCanIface.hpp"
 #include "forklift_control/SafetyMonitor.hpp"
+#include "forklift_control/ForkHeightController.hpp"
 #include <cmath>
 #include <algorithm>
 
@@ -44,7 +45,8 @@ public:
     can_(declare_parameter<std::string>("can_iface", "can0")),
     drive_(can_, /*node_id=*/declare_parameter<int>("node_id", 3)),
   fork_(can_, drive_, /*node_id*/std::nullopt),
-  safety_(*this, "/safety", 500ms, true, 4)
+  safety_(*this, "/safety", 500ms, true, 4),
+  fork_height_ctrl_(*this, "/fork_height_cmd", "/fork_position", 500ms)
   {
     // Initial drive state
     drive_.set_ramps(1.0f, 1.0f);           // accel/decel seconds
@@ -173,12 +175,42 @@ private:
       drive_.set_speed_rpm(0.f);
     }
 
-    // ----- Forks (RIGHT STICK Y): up->lift, down->lower -----
-    const float ry_raw    = s.ry;           
-    const float lift_cmd  = dz(-ry_raw);    // up to + (0..1)
-    const float lower_cmd = dz( ry_raw);    // down to + (0..1)
+    // ----- Forks: auto/manual mode -----
+    const bool auto_mode = fork_height_ctrl_.is_auto_mode();
 
-    if (!estop_) {
+    // Mode transition: stop hydraulics and reset PID, skip one tick
+    if (auto_mode != prev_auto_mode_) {
+      fork_.stop_hydraulics();
+      fork_height_ctrl_.reset_pid();
+      fork_status_ = "MODE_CHANGE";
+      prev_auto_mode_ = auto_mode;
+      RCLCPP_INFO(get_logger(), "Fork mode changed to %s", auto_mode ? "AUTO" : "MANUAL");
+      // Skip this tick to allow clean transition
+    } else if (estop_) {
+      fork_.stop_hydraulics();
+      fork_status_ = "OFF";
+    } else if (auto_mode) {
+      // --- Automatic fork height control ---
+      auto cmd = fork_height_ctrl_.compute(0.02);
+      if (fork_height_ctrl_.position_safety_violation()) {
+        fork_.stop_hydraulics();
+        fork_status_ = "AUTO SAFETY_VIOLATION";
+      } else if (cmd.action == forklift_control::ForkAction::LIFT) {
+        fork_.lift_pwm(cmd.value);
+        fork_status_ = "AUTO LIFT " + std::to_string(cmd.value) + "%";
+      } else if (cmd.action == forklift_control::ForkAction::LOWER) {
+        fork_.lower_valve(cmd.value);
+        fork_status_ = "AUTO LOWER " + std::to_string(cmd.value);
+      } else {
+        fork_.stop_hydraulics();
+        fork_status_ = "AUTO AT_TARGET";
+      }
+    } else {
+      // --- Manual joystick fork control ---
+      const float ry_raw    = s.ry;
+      const float lift_cmd  = dz(-ry_raw);    // up to + (0..1)
+      const float lower_cmd = dz( ry_raw);    // down to + (0..1)
+
       if (lift_cmd > FORK_DEADBAND && lift_cmd >= lower_cmd) {
         const int pwm = static_cast<int>(std::round(std::min(1.f, lift_cmd) * LIFT_PWM_MAX));
         fork_.lift_pwm(pwm);
@@ -191,18 +223,15 @@ private:
         fork_.stop_hydraulics();
         fork_status_ = "OFF";
       }
-    } else {
-      fork_.stop_hydraulics();
-      fork_status_ = "OFF";
     }
 
     // Debug (0.5s throttle) showing raw trigger values too
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 500,
-      "ESTOP=%d  RT=%.2f LT=%.2f  rpm=%s  steer=%+.0f  RY=%+.2f  forks=%s",
-      (int)estop_, rt_n, lt_n,
+      "ESTOP=%d  AUTO=%d  RT=%.2f LT=%.2f  rpm=%s  steer=%+.0f  forks=%s",
+      (int)estop_, (int)auto_mode, rt_n, lt_n,
       (!estop_ ? "active" : "0"),
-      steer_cmd_deg, ry_raw,
+      steer_cmd_deg,
       fork_status_.c_str());
   }
 
@@ -211,13 +240,15 @@ private:
   forklift_control::SocketCanIface can_;
   forklift_control::DriveLogic     drive_;
   forklift_control::ForkLogic      fork_;
-  forklift_control::SafetyMonitor  safety_;
+  forklift_control::SafetyMonitor        safety_;
+  forklift_control::ForkHeightController fork_height_ctrl_;
   rclcpp::TimerBase::SharedPtr     ctrl_timer_;
   rclcpp::TimerBase::SharedPtr     ka_drive_timer_;
   rclcpp::TimerBase::SharedPtr     ka_fork_timer_;
   bool        estop_ = false;
   bool        first_joy_received_ = false;
   bool        startup_lockout_active_ = false;
+  bool        prev_auto_mode_ = false;
   std::string fork_status_ = "OFF";
 
   bool inputs_neutral_(const forklift_control::JoyState& s) const {

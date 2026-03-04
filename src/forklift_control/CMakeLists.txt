@@ -35,10 +35,15 @@ add_library(fork_logic src/ForkLogic.cpp)
 target_include_directories(fork_logic PUBLIC include)
 target_compile_features(fork_logic PUBLIC cxx_std_17)
 
+add_library(fork_height_controller src/ForkHeightController.cpp)
+target_include_directories(fork_height_controller PUBLIC include)
+target_compile_features(fork_height_controller PUBLIC cxx_std_17)
+ament_target_dependencies(fork_height_controller rclcpp std_msgs)
+
 # forklift_control_node
 add_executable(ForkliftControlNode src/ForkliftControlNode.cpp)
 target_include_directories(ForkliftControlNode PUBLIC include)
-target_link_libraries(ForkliftControlNode joy_reader drive_logic fork_logic safety_monitor socketcan_iface)
+target_link_libraries(ForkliftControlNode joy_reader drive_logic fork_logic fork_height_controller safety_monitor socketcan_iface)
 ament_target_dependencies(ForkliftControlNode rclcpp sensor_msgs std_msgs)
 
 install(TARGETS
@@ -46,6 +51,7 @@ install(TARGETS
   drive_logic
   safety_monitor
   fork_logic
+  fork_height_controller
   ForkliftControlNode
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
